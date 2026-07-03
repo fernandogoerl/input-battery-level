@@ -7,8 +7,12 @@ namespace BatteryTray;
 public sealed class TrayContext : ApplicationContext
 {
     private const string AppName = "BatteryTray";
-    private static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(60);
+    private static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(30);
     private const int LowBatteryThreshold = 15;
+
+    // Cap a single poll so one slow/hung source (e.g. a Bluetooth enumeration) can't stall
+    // the whole refresh and leave the UI looking frozen.
+    private static readonly TimeSpan PollBudget = TimeSpan.FromSeconds(8);
 
     private readonly NotifyIcon _tray;
     private readonly System.Windows.Forms.Timer _timer;
@@ -19,6 +23,7 @@ public sealed class TrayContext : ApplicationContext
     private readonly List<ToolStripItem> _deviceItems = new();
 
     private bool _polling;
+    private bool _repollQueued;
     private Icon? _currentIcon;
     private readonly HashSet<string> _lowNotified = new();
 
@@ -149,14 +154,25 @@ public sealed class TrayContext : ApplicationContext
 
     private async void TriggerPoll()
     {
+        // If a poll is already running (e.g. the 30s timer fired), don't drop this request —
+        // "Refresh now" must always result in a fresh read. Queue one more pass to run as
+        // soon as the current one finishes.
         if (_polling)
+        {
+            _repollQueued = true;
             return;
+        }
 
         _polling = true;
         try
         {
-            var readings = await Task.Run(PollAll);
-            UpdateUi(readings);
+            do
+            {
+                _repollQueued = false;
+                var readings = await Task.Run(PollAll);
+                UpdateUi(readings);
+            }
+            while (_repollQueued);
         }
         catch
         {
@@ -170,17 +186,25 @@ public sealed class TrayContext : ApplicationContext
 
     private List<BatteryReading> PollAll()
     {
+        // Poll every source in parallel and only wait a bounded time. A source that hangs is
+        // simply skipped this cycle instead of freezing the refresh; the sources touch
+        // different devices so they don't contend with each other.
+        var tasks = _sources
+            .Select(s => Task.Run<IReadOnlyList<BatteryReading>>(() =>
+            {
+                try { return s.Poll(); }
+                catch { return Array.Empty<BatteryReading>(); }
+            }))
+            .ToArray();
+
+        try { Task.WaitAll(tasks, PollBudget); }
+        catch { /* individual task faults are handled below */ }
+
         var all = new List<BatteryReading>();
-        foreach (var source in _sources)
+        foreach (var t in tasks)
         {
-            try
-            {
-                all.AddRange(source.Poll());
-            }
-            catch
-            {
-                // Skip a misbehaving source this cycle.
-            }
+            if (t.IsCompletedSuccessfully)
+                all.AddRange(t.Result);
         }
 
         return all
