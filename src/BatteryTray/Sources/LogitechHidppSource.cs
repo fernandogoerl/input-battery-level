@@ -269,15 +269,26 @@ public sealed class LogitechHidppSource : IBatterySource
             {
                 DeviceKind.Keyboard => "Logitech Keyboard",
                 DeviceKind.Mouse => "Logitech Mouse",
+                DeviceKind.Headset => "Logitech Headset",
+                DeviceKind.Gamepad => "Logitech Gamepad",
+                DeviceKind.Speaker => "Logitech Speaker",
                 _ => "Logitech device",
             };
         }
     }
 
+    // HID++ 2.0 DeviceNameAndType (0x0005) getDeviceType values.
     private static DeviceKind MapDeviceType(byte type) => type switch
     {
         0 => DeviceKind.Keyboard,
+        2 => DeviceKind.Keyboard,   // numpad
         3 => DeviceKind.Mouse,
+        4 => DeviceKind.Mouse,      // trackpad
+        5 => DeviceKind.Mouse,      // trackball
+        8 => DeviceKind.Headset,
+        11 => DeviceKind.Gamepad,   // joystick
+        12 => DeviceKind.Gamepad,
+        14 => DeviceKind.Speaker,
         _ => DeviceKind.Unknown,
     };
 

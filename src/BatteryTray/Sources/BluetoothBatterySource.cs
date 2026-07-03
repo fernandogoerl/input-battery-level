@@ -95,7 +95,10 @@ public sealed class BluetoothBatterySource : IBatterySource
         string n = name.ToLowerInvariant();
         if (n.Contains("keyboard")) return DeviceKind.Keyboard;
         if (n.Contains("mouse") || n.Contains("mx ") || n.Contains("trackpad")) return DeviceKind.Mouse;
-        if (n.Contains("controller") || n.Contains("gamepad")) return DeviceKind.XboxController;
+        if (n.Contains("controller") || n.Contains("gamepad")) return DeviceKind.Gamepad;
+        if (n.Contains("headset") || n.Contains("headphone") || n.Contains("buds") ||
+            n.Contains("airpods") || n.Contains("wh-") || n.Contains("wf-")) return DeviceKind.Headset;
+        if (n.Contains("speaker") || n.Contains("soundbar")) return DeviceKind.Speaker;
         return DeviceKind.Unknown;
     }
 }
