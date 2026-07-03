@@ -16,34 +16,46 @@ internal static class Diagnostics
         sb.AppendLine($"BatteryTray diagnostics — {DateTime.Now:u}");
         sb.AppendLine(new string('=', 60));
 
-        // 1) Raw HID enumeration of Logitech devices (helps debugging interface pick).
-        sb.AppendLine();
-        sb.AppendLine("Logitech HID interfaces (VID 0x046D):");
-        try
+        // 1) Raw HID enumeration per supported vendor (helps debugging interface pick and
+        //    verifying the not-yet-hardware-tested brand sources).
+        (int vid, string brand)[] vendors =
         {
-            foreach (var dev in DeviceList.Local.GetHidDevices(vendorID: 0x046D))
+            (0x046D, "Logitech"),
+            (0x1532, "Razer"),
+            (0x1B1C, "Corsair"),
+            (0x9886, "Astro"),
+        };
+
+        foreach (var (vid, brand) in vendors)
+        {
+            sb.AppendLine();
+            sb.AppendLine($"{brand} HID interfaces (VID 0x{vid:X4}):");
+            try
             {
-                string name;
-                try { name = dev.GetFriendlyName(); } catch { name = "(no name)"; }
-                int outLen = -1, inLen = -1;
-                try { outLen = dev.GetMaxOutputReportLength(); } catch { }
-                try { inLen = dev.GetMaxInputReportLength(); } catch { }
-                sb.AppendLine($"  PID 0x{dev.ProductID:X4} out={outLen,3} in={inLen,3}  {name}");
+                bool any = false;
+                foreach (var dev in DeviceList.Local.GetHidDevices(vendorID: vid))
+                {
+                    any = true;
+                    string name;
+                    try { name = dev.GetFriendlyName(); } catch { name = "(no name)"; }
+                    int outLen = -1, inLen = -1, featLen = -1;
+                    try { outLen = dev.GetMaxOutputReportLength(); } catch { }
+                    try { inLen = dev.GetMaxInputReportLength(); } catch { }
+                    try { featLen = dev.GetMaxFeatureReportLength(); } catch { }
+                    sb.AppendLine($"  PID 0x{dev.ProductID:X4} out={outLen,3} in={inLen,3} feat={featLen,3}  {name}");
+                }
+                if (!any)
+                    sb.AppendLine("  (none present)");
             }
-        }
-        catch (Exception ex)
-        {
-            sb.AppendLine("  ! enumeration failed: " + ex.Message);
+            catch (Exception ex)
+            {
+                sb.AppendLine("  ! enumeration failed: " + ex.Message);
+            }
         }
 
         // 2) Run each source repeatedly, REUSING the source objects, to mirror how the
         //    tray polls (and to exercise the per-device plan cache on rounds 2+).
-        var sources = new IBatterySource[]
-        {
-            new LogitechHidppSource(),
-            new BluetoothBatterySource(),
-            new XInputXboxSource(),
-        };
+        var sources = BatterySources.CreateAll();
 
         const int rounds = 4;
         for (int round = 1; round <= rounds; round++)

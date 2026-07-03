@@ -42,12 +42,7 @@ public sealed class TrayContext : ApplicationContext
 
     public TrayContext()
     {
-        _sources = new IBatterySource[]
-        {
-            new LogitechHidppSource(),
-            new BluetoothBatterySource(),
-            new XInputXboxSource(),
-        };
+        _sources = BatterySources.CreateAll();
 
         _devicesHeader = new ToolStripMenuItem("Scanning…") { Enabled = false };
 
