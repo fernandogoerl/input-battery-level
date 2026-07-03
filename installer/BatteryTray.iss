@@ -34,6 +34,12 @@ SolidCompression=yes
 WizardStyle=modern
 ; We close/relaunch the app ourselves in [Code]; skip the Restart Manager UI.
 CloseApplications=no
+; --- Requirements check ------------------------------------------------------
+; The app is self-contained (bundles the .NET 8 runtime), so there is no separate
+; runtime to install. It does need 64-bit Windows 10 1809 (10.0.17763) or newer for
+; the WinRT Bluetooth-battery APIs. Setup refuses to run on anything older or on a
+; non-x64 CPU, with a clear message, rather than installing something that won't work.
+MinVersion=10.0.17763
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
 
@@ -53,6 +59,32 @@ Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: 
 Filename: "{app}\{#AppExeName}"; Description: "Launch {#AppName} now"; Flags: nowait postinstall skipifsilent
 
 [Code]
+function InitializeSetup(): Boolean;
+var
+  Version: TWindowsVersion;
+begin
+  GetWindowsVersionEx(Version);
+  // 64-bit Windows 10 1809+ is required (see [Setup] MinVersion). Give a clearer,
+  // app-specific message than the generic "unsupported version" one.
+  if not IsWin64 then
+  begin
+    MsgBox('Peripheral Battery Tray requires 64-bit Windows.' + #13#10 +
+           'This machine is running 32-bit Windows, so Setup cannot continue.',
+           mbCriticalError, MB_OK);
+    Result := False;
+    Exit;
+  end;
+  if (Version.Major < 10) or ((Version.Major = 10) and (Version.Build < 17763)) then
+  begin
+    MsgBox('Peripheral Battery Tray requires Windows 10 version 1809 (build 17763)' + #13#10 +
+           'or newer. Please update Windows and try again.',
+           mbCriticalError, MB_OK);
+    Result := False;
+    Exit;
+  end;
+  Result := True;
+end;
+
 procedure KillRunning;
 var
   ResultCode: Integer;
