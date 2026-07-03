@@ -13,7 +13,7 @@
     <RootNamespace>BatteryTray</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>app.ico</ApplicationIcon>
-    <Version>1.1.0</Version>
+    <Version>1.1.1</Version>
     <Product>Peripheral Battery Tray</Product>
     <!-- Keep the window subsystem clean; this is a pure tray app. -->
     <ApplicationHighDpiMode>PerMonitorV2</ApplicationHighDpiMode>

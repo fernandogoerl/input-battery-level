@@ -18,6 +18,6 @@ public static class BatterySources
         new CorsairSource(),       // Corsair wireless (Bragi), best-effort
         new AstroSource(),         // Astro A50 base station, best-effort
         new BluetoothBatterySource(),
-        new XInputXboxSource(),    // Xbox / XInput gamepads
+        new XboxControllerSource(), // Xbox gamepads (Windows.Gaming.Input + XInput)
     };
 }
