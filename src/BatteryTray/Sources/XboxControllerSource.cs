@@ -70,15 +70,14 @@ public sealed class XboxControllerSource : IBatterySource
             bool wired = x?.Wired ?? false;
             bool charging = (g?.Charging ?? false) || wired;
 
-            // Whether we actually know a real level (drives the "—" when stale).
-            bool levelKnown = g?.Percent is not null || (x is not null && !x.Wired);
-
-            // Human label when we don't have an exact %: the XInput bucket, "Wired", or a
-            // status word from the battery report.
+            // A wired-as-input controller has no meaningful wireless battery level (the API
+            // hands back a placeholder 100%), so always surface "Wired" and mark the level as
+            // unknown — this is what drives the "—" once the reading goes stale.
+            bool levelKnown = !wired;
             string? label =
-                g?.Percent is not null ? null
-                : x?.Label
-                  ?? (g is { Charging: true } ? "Charging" : "Connected");
+                wired ? "Wired"
+                : g?.Percent is not null ? null
+                : x?.Label ?? (g is { Charging: true } ? "Charging" : "Connected");
 
             string name = x?.Name ?? g?.Name ?? $"Xbox Controller {i + 1}";
 
