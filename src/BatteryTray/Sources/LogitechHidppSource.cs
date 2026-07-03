@@ -158,8 +158,10 @@ public sealed class LogitechHidppSource : IBatterySource
             if (_plans.TryGetValue(key, out var plan) &&
                 (DateTime.UtcNow - plan.ResolvedUtc) < TimeSpan.FromMinutes(10))
             {
-                // Re-verify the device is still reachable before trusting the plan.
-                if (Ping(stream, plan.DeviceIndex, outLen, inLen))
+                // Re-verify the device is still reachable before trusting the plan. Retry a
+                // couple of times: while the device is in active use the receiver can drop a
+                // single HID++ reply, and we don't want that to look like "disconnected".
+                if (PingWithRetry(stream, plan.DeviceIndex, outLen, inLen, attempts: 3))
                     return ReadBattery(stream, plan, outLen, inLen);
 
                 _plans.Remove(key);
@@ -303,7 +305,7 @@ public sealed class LogitechHidppSource : IBatterySource
             case FeatureUnifiedBattery:
             {
                 // func 1: get_status -> [stateOfCharge%, batteryLevelFlags, chargingStatus, externalPower]
-                var resp = Transact(stream, plan.DeviceIndex, plan.BatteryFeatureIndex, 0x01, null, outLen, inLen);
+                var resp = TransactWithRetry(stream, plan.DeviceIndex, plan.BatteryFeatureIndex, 0x01, null, outLen, inLen);
                 if (resp is null) return Disconnected(plan);
 
                 int soc = resp[4];
@@ -319,7 +321,7 @@ public sealed class LogitechHidppSource : IBatterySource
             case FeatureBatteryVoltage:
             {
                 // func 0: get_battery_voltage -> voltage (mV, big-endian) + flags
-                var resp = Transact(stream, plan.DeviceIndex, plan.BatteryFeatureIndex, 0x00, null, outLen, inLen);
+                var resp = TransactWithRetry(stream, plan.DeviceIndex, plan.BatteryFeatureIndex, 0x00, null, outLen, inLen);
                 if (resp is null) return Disconnected(plan);
 
                 int millivolts = (resp[4] << 8) | resp[5];
@@ -333,7 +335,7 @@ public sealed class LogitechHidppSource : IBatterySource
             case FeatureBatteryStatus:
             {
                 // func 0: get_battery -> [levelPercent, nextLevel, batteryStatus]
-                var resp = Transact(stream, plan.DeviceIndex, plan.BatteryFeatureIndex, 0x00, null, outLen, inLen);
+                var resp = TransactWithRetry(stream, plan.DeviceIndex, plan.BatteryFeatureIndex, 0x00, null, outLen, inLen);
                 if (resp is null) return Disconnected(plan);
 
                 int level = resp[4];
@@ -407,6 +409,30 @@ public sealed class LogitechHidppSource : IBatterySource
             new byte[] { 0x00, 0x00, marker }, outLen, inLen);
 
         return resp is not null && resp.Length > 6 && resp[6] == marker;
+    }
+
+    private bool PingWithRetry(HidStream stream, byte deviceIndex, int outLen, int inLen, int attempts)
+    {
+        for (int i = 0; i < attempts; i++)
+        {
+            if (Ping(stream, deviceIndex, outLen, inLen))
+                return true;
+        }
+        return false;
+    }
+
+    /// <summary>Like <see cref="Transact"/> but retries a couple of times, for the battery
+    /// read where a single dropped reply shouldn't demote a present device to disconnected.</summary>
+    private byte[]? TransactWithRetry(HidStream stream, byte deviceIndex, byte featureIndex, byte funcId,
+        byte[]? payload, int outLen, int inLen, int attempts = 3)
+    {
+        for (int i = 0; i < attempts; i++)
+        {
+            var resp = Transact(stream, deviceIndex, featureIndex, funcId, payload, outLen, inLen);
+            if (resp is not null)
+                return resp;
+        }
+        return null;
     }
 
     private byte GetFeatureIndex(HidStream stream, byte deviceIndex, ushort featureId, int outLen, int inLen)
