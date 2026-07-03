@@ -147,10 +147,11 @@ and `build.ps1` (publish + compile).
   it as `81% (asleep, 3m ago)` instead of dropping it. A device first appears only *after* it
   has responded once — so a mouse/keyboard that's asleep at launch shows up the moment you
   use it. Devices unheard-from for 12h are forgotten.
-- **Polls every 30s** (plus on left-click or "Refresh now"). Sources are polled in parallel
-  under an 8s budget so a slow one can't stall the refresh; a "Refresh now" issued mid-poll is
-  queued rather than dropped. "Refresh now" re-reads awake devices immediately; asleep ones
-  keep their last-known value until they wake.
+- **Polls every 30s**, and **immediately when a USB device is plugged in or removed** (plus on
+  left-click or "Refresh now"). Sources are polled in parallel under an 8s budget so a slow one
+  can't stall the refresh; a "Refresh now" issued mid-poll is queued rather than dropped.
+  "Refresh now" re-reads awake devices immediately; asleep ones keep their last-known value
+  until they wake.
 - **Xbox battery is limited by what the APIs expose.** For a rechargeable controller,
   Windows.Gaming.Input reports charging and an exact %. With disposable AA batteries there's no
   charge state and only XInput's coarse bucket (Empty/Low/Medium/Full); the "~%" is an
