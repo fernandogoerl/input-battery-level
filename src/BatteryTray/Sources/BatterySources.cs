@@ -15,6 +15,8 @@ public static class BatterySources
     {
         new LogitechHidppSource(), // Logitech wireless, exact %
         new RazerSource(),         // Razer wireless, via the OpenRazer protocol
+        new CorsairSource(),       // Corsair wireless (Bragi), best-effort
+        new AstroSource(),         // Astro A50 base station, best-effort
         new BluetoothBatterySource(),
         new XInputXboxSource(),    // Xbox / XInput gamepads
     };
