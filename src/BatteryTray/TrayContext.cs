@@ -115,22 +115,39 @@ public sealed class TrayContext : ApplicationContext
         _flyout.Activate(); // ensure it can receive Deactivate to auto-close
     }
 
+    /// <summary>
+    /// Resolves what a device should actually display, accounting for staleness. A stale
+    /// reading must not assert live-only facts: no charging bolt, and if we never knew a real
+    /// battery level (e.g. it was on a USB cable), show "—" instead of the placeholder.
+    /// </summary>
+    private static (string value, int? barPercent, bool showBolt) Effective(BatteryReading r, bool stale)
+    {
+        bool showBolt = !stale && r.IsCharging;
+
+        if (stale && !r.LevelKnown)
+            return ("—", null, showBolt); // e.g. controller last seen wired; battery unknown now
+
+        string value = r.LevelLabel ?? (r.Percentage is int p ? $"{p}%" : "—");
+        return (value, r.Percentage, showBolt);
+    }
+
     private static List<BatteryFlyout.Row> BuildRows(List<DisplayItem> display, DateTime now)
     {
         var rows = new List<BatteryFlyout.Row>(display.Count);
         foreach (var d in display)
         {
+            var (value, barPercent, showBolt) = Effective(d.Reading, d.IsStale);
             string status = d.IsStale
                 ? $"asleep · {Ago(now - d.LastSeenUtc)}"
                 : (d.Reading.IsCharging ? "charging" : "");
 
             rows.Add(new BatteryFlyout.Row(
                 Name: d.Reading.Name,
-                Percent: d.Reading.Percentage,
-                LevelLabel: d.Reading.LevelLabel,
+                Value: value,
+                BarPercent: barPercent,
                 Status: status,
                 IsStale: d.IsStale,
-                IsCharging: d.Reading.IsCharging));
+                ShowBolt: showBolt));
         }
         return rows;
     }
@@ -278,8 +295,8 @@ public sealed class TrayContext : ApplicationContext
         if (!d.IsStale)
             return d.Reading.DisplayStatus();
 
-        string pct = d.Reading.Percentage is int p ? $"{p}%" : (d.Reading.LevelLabel ?? "unknown");
-        return $"{pct} (asleep, {Ago(now - d.LastSeenUtc)})";
+        var (value, _, _) = Effective(d.Reading, stale: true);
+        return $"{value} (asleep, {Ago(now - d.LastSeenUtc)})";
     }
 
     private static string Ago(TimeSpan span)
@@ -298,8 +315,10 @@ public sealed class TrayContext : ApplicationContext
         // NotifyIcon tooltip is capped at 127 chars; keep it terse.
         var lines = display.Select(d =>
         {
-            string pct = d.Reading.Percentage is int p ? $"{p}%" : (d.Reading.LevelLabel ?? "?");
-            return d.IsStale ? $"{d.Reading.Name}: {pct} (asleep)" : $"{d.Reading.Name}: {d.Reading.DisplayStatus()}";
+            if (!d.IsStale)
+                return $"{d.Reading.Name}: {d.Reading.DisplayStatus()}";
+            var (value, _, _) = Effective(d.Reading, stale: true);
+            return $"{d.Reading.Name}: {value} (asleep)";
         });
         string text = "Peripheral Battery\n" + string.Join("\n", lines);
         return text.Length <= 127 ? text : text[..127];

@@ -94,6 +94,8 @@ public sealed class XInputXboxSource : IBatterySource
                     Kind = DeviceKind.XboxController,
                     Percentage = approx,
                     LevelLabel = label,
+                    // A wired controller reports no real wireless battery level.
+                    LevelKnown = !wired,
                     IsCharging = wired,
                     IsConnected = true,
                 });

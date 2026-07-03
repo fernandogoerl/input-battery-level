@@ -21,8 +21,11 @@ public sealed class BatteryFlyout : Form
     private IReadOnlyList<Row> _rows = Array.Empty<Row>();
     private bool _dark = true;
 
-    public sealed record Row(string Name, int? Percent, string? LevelLabel, string Status,
-        bool IsStale, bool IsCharging);
+    /// <param name="Value">Right-hand text: "81%", "Full", "Wired", or "—".</param>
+    /// <param name="BarPercent">Fill fraction for the bar, or null for no fill.</param>
+    /// <param name="ShowBolt">Draw the charging bolt (already false for stale rows).</param>
+    public sealed record Row(string Name, string Value, int? BarPercent, string Status,
+        bool IsStale, bool ShowBolt);
 
     public BatteryFlyout()
     {
@@ -126,17 +129,15 @@ public sealed class BatteryFlyout : Form
                 new Rectangle(PadX, y + 24, Width - PadX * 2 - 90, 16), sub,
                 TextFormatFlags.Left | TextFormatFlags.EndEllipsis);
 
-            // Percent text (far right). Prefer a coarse label (Xbox "Full"/"Wired") when the
-            // device only reports buckets; otherwise the exact percentage.
-            string pctText = row.LevelLabel ?? (row.Percent is int p ? $"{p}%" : "—");
+            // Value text (far right): percentage, coarse label, or "—".
             var pctRect = new Rectangle(Width - PadX - 44, y + (RowH - 20) / 2, 44, 20);
-            Color pctColor = row.IsStale ? sub : LevelColor(row.Percent);
-            TextRenderer.DrawText(g, pctText, pctFont, pctRect, pctColor,
+            Color pctColor = row.IsStale ? sub : LevelColor(row.BarPercent);
+            TextRenderer.DrawText(g, row.Value, pctFont, pctRect, pctColor,
                 TextFormatFlags.Right | TextFormatFlags.VerticalCenter);
 
-            // Battery bar (left of the percent text)
+            // Battery bar (left of the value text)
             DrawBattery(g, new Rectangle(pctRect.Left - 8 - 44, y + (RowH - 16) / 2, 44, 16),
-                row.Percent, row.IsStale, row.IsCharging);
+                row.BarPercent, row.IsStale, row.ShowBolt);
 
             y += RowH;
         }

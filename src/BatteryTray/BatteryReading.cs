@@ -27,6 +27,13 @@ public sealed record BatteryReading
     /// <summary>Set when the source only knows a coarse level (e.g. Xbox "Full"/"Low").</summary>
     public string? LevelLabel { get; init; }
 
+    /// <summary>
+    /// False when no real battery level is available — e.g. an Xbox controller on a USB
+    /// cable ("Wired"), where the percentage is a placeholder. Such a reading must not be
+    /// shown as a battery level once it goes stale.
+    /// </summary>
+    public bool LevelKnown { get; init; } = true;
+
     public bool IsCharging { get; init; }
     public bool IsConnected { get; init; }
 
@@ -38,9 +45,13 @@ public sealed record BatteryReading
         if (!IsConnected)
             return "not connected";
 
-        string core = Percentage is int p
-            ? (LevelLabel is null ? $"{p}%" : $"{LevelLabel} (~{p}%)")
-            : (LevelLabel ?? "unknown");
+        string core;
+        if (!LevelKnown)
+            core = LevelLabel ?? "plugged in";
+        else if (Percentage is int p)
+            core = LevelLabel is null ? $"{p}%" : $"{LevelLabel} (~{p}%)";
+        else
+            core = LevelLabel ?? "unknown";
 
         if (IsCharging)
             core += " ⚡";

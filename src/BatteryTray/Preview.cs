@@ -13,10 +13,11 @@ internal static class Preview
         using var f = new BatteryFlyout();
         f.SetRows(new List<BatteryFlyout.Row>
         {
-            new("G502 X LIGHTSPEED", 81, null, "", false, false),
-            new("G915 X LS TKL", 59, null, "asleep · 3m ago", true, false),
-            new("Xbox Controller 1", 100, "Full", "charging", false, true),
-            new("WH-1000XM5 headphones", 12, null, "", false, false),
+            new("G502 X LIGHTSPEED", "81%", 81, "", false, false),
+            new("G915 X LS TKL", "58%", 58, "asleep · 6m ago", true, false),
+            new("Xbox Controller 1", "—", null, "asleep · 3m ago", true, false),   // stale, was wired
+            new("Xbox Controller 2", "Wired", 100, "charging", false, true),       // live, wired
+            new("WH-1000XM5 headphones", "12%", 12, "", false, false),
         });
         f.StartPosition = FormStartPosition.Manual;
         f.Location = new Point(0, 0);
