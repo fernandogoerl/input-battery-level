@@ -3,9 +3,11 @@ namespace BatteryTray;
 public enum DeviceKind
 {
     Unknown,
-    XboxController,
     Keyboard,
     Mouse,
+    Gamepad,
+    Headset,
+    Speaker,
 }
 
 /// <summary>
@@ -61,9 +63,11 @@ public sealed record BatteryReading
 
     public string KindGlyph => Kind switch
     {
-        DeviceKind.XboxController => "🎮",
         DeviceKind.Keyboard => "⌨",
         DeviceKind.Mouse => "🖱",
+        DeviceKind.Gamepad => "🎮",
+        DeviceKind.Headset => "🎧",
+        DeviceKind.Speaker => "🔊",
         _ => "•",
     };
 }

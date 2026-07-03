@@ -91,7 +91,7 @@ public sealed class XInputXboxSource : IBatterySource
                 {
                     Id = $"xinput:{i}",
                     Name = $"Xbox Controller {i + 1}",
-                    Kind = DeviceKind.XboxController,
+                    Kind = DeviceKind.Gamepad,
                     Percentage = approx,
                     LevelLabel = label,
                     // A wired controller reports no real wireless battery level.
