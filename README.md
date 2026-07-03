@@ -42,7 +42,7 @@ Each source implements a common `IBatterySource` and is registered in one place
 
 | Brand / class | Method | Detail |
 | --- | --- | --- |
-| Xbox controllers | **XInput** (`XInputGetBatteryInformation`, `xinput1_4.dll`) | Coarse buckets: Empty / Low / Medium / Full (this is all Xbox controllers expose). |
+| Xbox controllers | **Windows.Gaming.Input** battery report + **XInput** | Charging state and (for rechargeable packs) an exact %; XInput adds presence and a coarse bucket (Empty / Low / Medium / Full) as a fallback. |
 | Logitech wireless | **HID++ 2.0** over raw HID | Exact %. `UnifiedBattery (0x1004)` → voltage `0x1001` → legacy `0x1000`. |
 | Razer wireless | **OpenRazer HID feature report** | 90-byte razer report, command class `0x07` (`0x80` level, `0x84` charging). |
 | Corsair wireless | **Bragi read-property** over HID | Battery level property `0x0F`, charging `0x10`. |
@@ -127,7 +127,7 @@ src/BatteryTray/
   Preview.cs                 --previewflyout renders the panel to a PNG
   Sources/
     BatterySources.cs        Central registry — CreateAll() lists every source
-    XInputXboxSource.cs      Xbox via XInput P/Invoke
+    XboxControllerSource.cs  Xbox via Windows.Gaming.Input (charging + %) with XInput fallback
     LogitechHidppSource.cs   Logitech wireless via HID++ 2.0
     RazerSource.cs           Razer wireless via the OpenRazer feature-report protocol
     CorsairSource.cs         Corsair wireless via the Bragi read-property protocol
@@ -147,10 +147,15 @@ and `build.ps1` (publish + compile).
   it as `81% (asleep, 3m ago)` instead of dropping it. A device first appears only *after* it
   has responded once — so a mouse/keyboard that's asleep at launch shows up the moment you
   use it. Devices unheard-from for 12h are forgotten.
-- **Polls every 60s** (plus on double-click or "Refresh now"). "Refresh now" re-reads awake
-  devices immediately; asleep ones keep their last-known value until they wake.
-- **Xbox is coarse by design.** The controller firmware only reports four levels; the "~%"
-  shown is an approximation for the icon fill. The Logitech values are exact.
+- **Polls every 30s** (plus on left-click or "Refresh now"). Sources are polled in parallel
+  under an 8s budget so a slow one can't stall the refresh; a "Refresh now" issued mid-poll is
+  queued rather than dropped. "Refresh now" re-reads awake devices immediately; asleep ones
+  keep their last-known value until they wake.
+- **Xbox battery is limited by what the APIs expose.** For a rechargeable controller,
+  Windows.Gaming.Input reports charging and an exact %. With disposable AA batteries there's no
+  charge state and only XInput's coarse bucket (Empty/Low/Medium/Full); the "~%" is an
+  approximation for the icon fill. A controller connected by USB cable *as the input device*
+  shows "Wired".
 - If a device shows nothing, make sure it's paired to *its* dongle and awake. The `--diag`
   output lists every HID interface it can see per supported vendor (with report lengths),
   which helps debugging and verifying the not-yet-hardware-tested brand sources.

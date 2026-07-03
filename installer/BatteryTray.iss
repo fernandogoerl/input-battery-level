@@ -4,7 +4,7 @@
 
 #define AppName "Peripheral Battery Tray"
 #define AppExeName "BatteryTray.exe"
-#define AppVersion "1.1.0"
+#define AppVersion "1.1.1"
 #define AppPublisher "Fernando Goerl"
 #define AppUrl "https://github.com/fernandogoerl/input-battery-level"
 #define RunValueName "BatteryTray"
