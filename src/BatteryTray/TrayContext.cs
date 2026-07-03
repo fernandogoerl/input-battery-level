@@ -18,6 +18,11 @@ public sealed class TrayContext : ApplicationContext
     private readonly System.Windows.Forms.Timer _timer;
     private readonly IBatterySource[] _sources;
 
+    // Refresh promptly when USB devices come and go, coalescing the burst of change events
+    // a single plug/unplug produces.
+    private readonly DeviceChangeWatcher _deviceWatcher;
+    private readonly System.Windows.Forms.Timer _deviceDebounce;
+
     private readonly ToolStripMenuItem _devicesHeader;
     private readonly ToolStripMenuItem _startupItem;
     private readonly List<ToolStripItem> _deviceItems = new();
@@ -83,6 +88,13 @@ public sealed class TrayContext : ApplicationContext
         _timer = new System.Windows.Forms.Timer { Interval = (int)PollInterval.TotalMilliseconds };
         _timer.Tick += (_, _) => TriggerPoll();
         _timer.Start();
+
+        // Auto-refresh on USB plug/unplug, debounced so one plug (which emits several device
+        // messages, and needs a beat to settle) results in a single poll.
+        _deviceDebounce = new System.Windows.Forms.Timer { Interval = 1500 };
+        _deviceDebounce.Tick += (_, _) => { _deviceDebounce.Stop(); TriggerPoll(); };
+        _deviceWatcher = new DeviceChangeWatcher();
+        _deviceWatcher.Changed += () => { _deviceDebounce.Stop(); _deviceDebounce.Start(); };
 
         TriggerPoll();
     }
@@ -372,6 +384,8 @@ public sealed class TrayContext : ApplicationContext
     private void ExitApp()
     {
         _timer.Stop();
+        _deviceDebounce.Stop();
+        _deviceWatcher.Dispose();
         _tray.Visible = false;
         _tray.Dispose();
         _currentIcon?.Dispose();
