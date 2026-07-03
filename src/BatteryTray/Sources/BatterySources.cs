@@ -14,6 +14,7 @@ public static class BatterySources
     public static IBatterySource[] CreateAll() => new IBatterySource[]
     {
         new LogitechHidppSource(), // Logitech wireless, exact %
+        new RazerSource(),         // Razer wireless, via the OpenRazer protocol
         new BluetoothBatterySource(),
         new XInputXboxSource(),    // Xbox / XInput gamepads
     };
