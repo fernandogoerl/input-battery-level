@@ -1,167 +1,196 @@
 # Peripheral Battery Tray
 
-A lightweight Windows 11 system-tray app that shows the battery level of your wireless
-peripherals. It isn't tied to a fixed device list — each source describes whatever it finds
-(keyboard, mouse, gamepad, headset, …) by kind:
+A small Windows system tray app that shows the battery level of wireless peripherals such as
+game controllers, keyboards, mice, and headsets. It talks to the hardware directly, so you do
+not need Logitech G HUB, Razer Synapse, the Xbox Accessories app, or any other vendor software
+running in the background.
 
-- **Xbox controllers** connected through the Xbox Wireless Adapter (dongle)
-- **Logitech** wireless devices on a Lightspeed / Bolt / Unifying receiver (keyboards, mice,
-  headsets — e.g. G915 X, G502 X), exact %
-- **Razer**, **Corsair**, and **Astro** wireless devices *(implemented, pending hardware
-  verification — see [Device support](#device-support))*
-- **Any paired Bluetooth device** whose battery Windows tracks (headphones, BLE mice/keyboards, …)
+The tray icon is a battery glyph, colored green, amber, or red based on whichever device is
+lowest, with the percentage below it. Left-click opens a small panel listing each device and
+its charge. Right-click opens a menu with Refresh, "Start with Windows", and Exit.
 
-No vendor software (Logitech G HUB, Razer Synapse, Xbox Accessories, …) required — it talks
-to the hardware directly.
+## Contents
 
-The tray icon is a battery glyph colored by the **lowest** device (green / amber / red)
-with the percentage below it. **Left-click** toggles a battery panel (per-device bars and
-levels); **right-click** opens the action menu (refresh, "Start with Windows", exit). Hover
-still shows a quick text tooltip. A balloon warns once when any device drops below 15%.
+- [Features](#features)
+- [Supported devices](#supported-devices)
+- [Requirements](#requirements)
+- [Installation](#installation)
+- [Usage](#usage)
+- [Building from source](#building-from-source)
+- [How it works](#how-it-works)
+- [Project structure](#project-structure)
+- [Notes and limitations](#notes-and-limitations)
+- [License](#license)
 
----
+## Features
 
-## Install
+- Shows battery for wireless controllers, keyboards, mice, and headsets in one place.
+- No vendor software required; it reads the devices directly.
+- Not tied to a fixed device list. Each device is described by what it is (keyboard, mouse,
+  gamepad, headset, speaker).
+- Left-click battery panel and a right-click action menu.
+- Polls every 30 seconds and refreshes immediately when a USB device is plugged in or removed.
+- Remembers a device's last reading when it goes to sleep instead of dropping it from the list.
+- Warns once with a tray balloon when a device drops below 15 percent.
+- Optional "Start with Windows".
+- Light and dark theme aware.
 
-Download the latest **`BatteryTray-Setup-<version>.exe`** from the
+## Supported devices
+
+Every device type is read by a small self-contained source. Adding support is a one-line change
+in `Sources/BatterySources.cs`.
+
+| Device                | How it is read                                              | Notes                                                                                  |
+| --------------------- | ---------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| Xbox controllers      | Windows.Gaming.Input battery report, with XInput as backup | Charging state and, for rechargeable packs, an exact percent. XInput adds the coarse Empty/Low/Medium/Full bucket. |
+| Logitech wireless     | HID++ 2.0 over raw HID                                      | Exact percent. Works with Lightspeed, Bolt, and Unifying receivers.                    |
+| Razer wireless        | OpenRazer HID feature report                               | See the note below about hardware verification.                                        |
+| Corsair wireless      | Bragi read-property over HID                               | See the note below about hardware verification.                                        |
+| Astro A50             | Base station HID status frame                              | See the note below about hardware verification.                                        |
+| Bluetooth devices     | Windows PnP battery property via WinRT                     | Exact percent. The same value the Settings app shows, for paired BLE and classic BT.   |
+
+The Xbox, Logitech, and Bluetooth paths are the ones verified in day to day use.
+
+The Razer, Corsair, and Astro sources are implemented from public protocol documentation but
+have not been verified against real hardware yet. They only act on their own vendor IDs and
+fail closed, so if a device does not answer with a plausible reading the source reports nothing
+and cannot affect the verified devices. If you have one of these devices, run the app with
+`--diag` (see [Usage](#usage)) and the output will show whether the source is reading it.
+
+## Requirements
+
+- 64-bit Windows 10 version 1809 (build 17763) or newer, or Windows 11.
+- Nothing else to run the installer build. It bundles the .NET runtime.
+- To build from source you need the .NET 8 SDK.
+
+## Installation
+
+Download the latest `BatteryTray-Setup-x.y.z.exe` from the
 [Releases](https://github.com/fernandogoerl/input-battery-level/releases) page and run it.
-It's a per-user install (no admin), goes to `%LocalAppData%\Programs\BatteryTray`, and can
-start automatically at sign-in. The installer bundles the .NET runtime, so there's nothing
-else to install; it checks up front that you're on 64-bit Windows 10 1809+ and stops with a
-clear message otherwise. Uninstall from Windows *Add or remove programs*.
 
-To build the installer yourself, see [`installer/`](installer/) and run `installer\build.ps1`
-(needs the .NET 8 SDK and [Inno Setup 6](https://jrsoftware.org/isinfo.php)).
+The installer is per-user and does not require administrator rights. It installs to
+`%LocalAppData%\Programs\BatteryTray`, checks that you are on a supported version of Windows,
+and offers to start the app automatically when you sign in. To remove it, use "Add or remove
+programs" in Windows Settings.
 
----
+The installer is not code signed, so Windows SmartScreen may show a warning the first time you
+run it. Choose "More info" and then "Run anyway".
 
-## How it reads each device
+## Usage
 
-Each source implements a common `IBatterySource` and is registered in one place
-(`Sources/BatterySources.cs`). Adding a device or brand is a one-line change there.
+Once running, the app sits in the notification area:
 
-| Brand / class | Method | Detail |
-| --- | --- | --- |
-| Xbox controllers | **Windows.Gaming.Input** battery report + **XInput** | Charging state and (for rechargeable packs) an exact %; XInput adds presence and a coarse bucket (Empty / Low / Medium / Full) as a fallback. |
-| Logitech wireless | **HID++ 2.0** over raw HID | Exact %. `UnifiedBattery (0x1004)` → voltage `0x1001` → legacy `0x1000`. |
-| Razer wireless | **OpenRazer HID feature report** | 90-byte razer report, command class `0x07` (`0x80` level, `0x84` charging). |
-| Corsair wireless | **Bragi read-property** over HID | Battery level property `0x0F`, charging `0x10`. |
-| Astro A50 | **Base-station HID status frame** | Battery nibble from the status report. |
-| Any Bluetooth device | **Windows PnP battery property** (`DEVPKEY_Bluetooth_Battery`) via WinRT | Exact %. The same value Settings shows; covers BLE (GATT Battery Service) and classic BT. |
+- Left-click the tray icon to open the battery panel with a row per device.
+- Right-click for the menu: Refresh now, Start with Windows, and Exit.
+- Hover over the icon for a short text summary.
 
-The Logitech path speaks the same protocol as Solaar / libratbag: it finds each Lightspeed
-receiver's HID++ "long report" interface (usage page `0xFF00`, report id `0x11`), pings the
-paired device, resolves the battery feature, and reads `DeviceNameAndType (0x0005)` for the
-friendly name and kind.
+The app polls every 30 seconds, and also refreshes as soon as any USB device is connected or
+disconnected. "Refresh now" forces an immediate read.
 
-### Device support
-
-Verified working on real hardware:
-
-```
-[Mouse]    G502 X LIGHTSPEED: 80%
-[Keyboard] G915 X LS TKL:     98%
-[Gamepad]  Xbox Controller 1: Medium (~60%)
-```
-
-The **Razer**, **Corsair**, and **Astro** sources are implemented from public protocol
-documentation but **not yet verified against hardware** (I don't own those devices). They are
-VID-guarded and fail closed — if a device doesn't answer with a plausible reading, the source
-reports nothing, so they can't affect the devices above. The **Bluetooth** source likewise
-reads the exact property Settings uses but hasn't been exercised with a battery-reporting BT
-device. Run `--diag` with the hardware attached to confirm and, if needed, tune the offsets.
-
----
-
-## Build & run
-
-Requires the **.NET 8 SDK** (`winget install Microsoft.DotNet.SDK.8`).
+It also has a few command line modes, mainly for debugging and development:
 
 ```powershell
-cd src/BatteryTray
+# Probe the hardware without a UI and print what each source sees, over several poll rounds
+BatteryTray.exe --diag report.txt
 
+# Run the internal checks for the sleep/merge logic; exit code 0 means all passed
+BatteryTray.exe --selftest result.txt
+```
+
+## Building from source
+
+You need the .NET 8 SDK. From the repository root:
+
+```powershell
 # Run from source
-dotnet run -c Release
+dotnet run --project src/BatteryTray -c Release
 
-# One-shot hardware probe (no UI) — prints what each source sees, over several poll rounds
-dotnet run -c Release -- --diag "$env:TEMP\battery_diag.txt" ; Get-Content "$env:TEMP\battery_diag.txt"
-
-# Self-test the poll/merge logic (asleep-device handling); exit code 0 = all passed
-dotnet run -c Release -- --selftest "$env:TEMP\battery_selftest.txt" ; Get-Content "$env:TEMP\battery_selftest.txt"
-```
-
-### Produce a single exe
-
-**Small (recommended)** — needs the .NET 8 Desktop Runtime installed (~0.4 MB exe):
-
-```powershell
-cd src/BatteryTray
-dotnet publish -c Release -r win-x64 --self-contained false -p:PublishSingleFile=true
-```
-
-**Portable** — bundles the runtime, runs on any Windows 10/11 machine (~154 MB exe):
-
-```powershell
-cd src/BatteryTray
-dotnet publish -c Release -r win-x64 --self-contained true `
+# Produce a self-contained single file exe (bundles the runtime, runs anywhere)
+dotnet publish src/BatteryTray/BatteryTray.csproj -c Release -r win-x64 --self-contained true `
   -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true
+
+# Produce a small exe that needs the .NET 8 Desktop Runtime installed
+dotnet publish src/BatteryTray/BatteryTray.csproj -c Release -r win-x64 --self-contained false `
+  -p:PublishSingleFile=true
 ```
 
-Both output to `bin/Release/net8.0-windows10.0.19041.0/win-x64/publish/BatteryTray.exe`. Copy it
-anywhere and double-click. Use the tray menu's **Start with Windows** to launch it at login
-(it writes an `HKCU\...\Run` entry pointing at wherever the exe currently lives — keep the
-exe in a stable folder).
+To build the installer, install [Inno Setup 6](https://jrsoftware.org/isinfo.php) and run:
 
----
+```powershell
+installer\build.ps1
+```
 
-## Project layout
+This publishes the self-contained exe and compiles it into
+`dist\BatteryTray-Setup-x.y.z.exe`.
+
+## How it works
+
+Each device type implements a common `IBatterySource` interface and is listed in one place,
+`Sources/BatterySources.cs`. Both the tray app and the `--diag` probe build their source list
+from that registry.
+
+The Logitech source speaks the same HID++ 2.0 protocol as Solaar and libratbag. It finds each
+receiver's HID++ long report interface, pings the paired device, resolves a battery feature
+(unified battery, then voltage, then the legacy battery status), and reads the device name and
+type for the label.
+
+The Xbox source combines two APIs. Windows.Gaming.Input provides a charging state and, for
+rechargeable packs, an exact percentage. XInput is used as a fallback for presence and the
+coarse battery bucket, and to detect a controller connected by cable as the input device, which
+shows as "Wired".
+
+Polling runs every 30 seconds on a timer, on any USB device change, and on demand. Sources are
+polled in parallel under an 8 second budget so a slow source cannot stall the refresh, and a
+refresh requested while another is in flight is queued rather than dropped.
+
+## Project structure
 
 ```
 src/BatteryTray/
-  Program.cs                 Entry point + single-instance guard + --diag mode
-  TrayContext.cs             NotifyIcon, menu, 60s poll loop, low-battery balloon, startup toggle
-  BatteryReading.cs          Model + IBatterySource interface
-  BatteryFlyout.cs           Left-click battery panel (owner-drawn borderless form)
-  Diagnostics.cs             --diag hardware probe (multi-round)
-  SelfTest.cs                --selftest for the asleep-device merge logic
-  Preview.cs                 --previewflyout renders the panel to a PNG
+  Program.cs                 Entry point, single instance guard, command line modes
+  TrayContext.cs             Tray icon, menu, poll loop, low battery balloon, startup toggle
+  BatteryReading.cs          Battery model, IBatterySource interface, DeviceKind
+  BatteryFlyout.cs           The left-click battery panel
+  DeviceChangeWatcher.cs     Watches for USB plug and unplug to trigger a refresh
+  Diagnostics.cs             The --diag hardware probe
+  SelfTest.cs                The --selftest checks for the sleep/merge logic
+  Preview.cs                 Renders the battery panel to a PNG for visual checks
   Sources/
-    BatterySources.cs        Central registry — CreateAll() lists every source
-    XboxControllerSource.cs  Xbox via Windows.Gaming.Input (charging + %) with XInput fallback
+    BatterySources.cs        Registry that lists every source
+    XboxControllerSource.cs  Xbox via Windows.Gaming.Input with an XInput fallback
     LogitechHidppSource.cs   Logitech wireless via HID++ 2.0
-    RazerSource.cs           Razer wireless via the OpenRazer feature-report protocol
+    RazerSource.cs           Razer wireless via the OpenRazer feature report protocol
     CorsairSource.cs         Corsair wireless via the Bragi read-property protocol
-    AstroSource.cs           Astro A50 base station via its status frame
-    BluetoothBatterySource.cs  Paired Bluetooth devices via WinRT PnP battery property
+    AstroSource.cs           Astro A50 base station status frame
+    BluetoothBatterySource.cs  Paired Bluetooth devices via the WinRT battery property
   Rendering/
     IconRenderer.cs          Draws the tray battery glyph
+
+installer/
+  BatteryTray.iss            Inno Setup script (per-user, with a requirements check)
+  build.ps1                  Publish and compile the installer
 ```
 
-The installer lives in [`installer/`](installer/): `BatteryTray.iss` (Inno Setup script)
-and `build.ps1` (publish + compile).
+## Notes and limitations
 
-## Notes & limits
+- Sleeping devices stay visible. Wireless mice, keyboards, and controllers power down when idle
+  and stop reporting. The app keeps the last reading and shows it as "asleep" with how long ago
+  it was seen, rather than dropping the device. A device first appears only after it has
+  responded once, so a peripheral that is asleep at launch shows up the moment you use it.
+  Devices not heard from for 12 hours are forgotten.
+- Xbox battery detail depends on the controller. A rechargeable pack reports charging and an
+  exact percent. Disposable AA batteries report only the coarse Empty, Low, Medium, or Full
+  bucket, and no charging state.
+- Logitech devices need to be paired to their own receiver and awake. If one shows nothing,
+  the `--diag` output lists the HID interfaces it can see, which helps.
+- Bluetooth shows only what Windows already tracks. A device appears once it is paired and
+  Windows has read its battery, the same value shown in Settings. Charging state is not exposed
+  for Bluetooth.
+- Only one process can read the Logitech receivers at a time. The app uses a single instance
+  lock, so do not run a second copy or a `--diag` probe while the tray app is live.
+- Standard user rights are enough. No administrator access is required.
 
-- **Sleeping devices stay visible.** Wireless mice/keyboards (and Xbox controllers) power
-  down when idle and stop reporting. The tray remembers each device's last reading and shows
-  it as `81% (asleep, 3m ago)` instead of dropping it. A device first appears only *after* it
-  has responded once — so a mouse/keyboard that's asleep at launch shows up the moment you
-  use it. Devices unheard-from for 12h are forgotten.
-- **Polls every 30s**, and **immediately when a USB device is plugged in or removed** (plus on
-  left-click or "Refresh now"). Sources are polled in parallel under an 8s budget so a slow one
-  can't stall the refresh; a "Refresh now" issued mid-poll is queued rather than dropped.
-  "Refresh now" re-reads awake devices immediately; asleep ones keep their last-known value
-  until they wake.
-- **Xbox battery is limited by what the APIs expose.** For a rechargeable controller,
-  Windows.Gaming.Input reports charging and an exact %. With disposable AA batteries there's no
-  charge state and only XInput's coarse bucket (Empty/Low/Medium/Full); the "~%" is an
-  approximation for the icon fill. A controller connected by USB cable *as the input device*
-  shows "Wired".
-- If a device shows nothing, make sure it's paired to *its* dongle and awake. The `--diag`
-  output lists every HID interface it can see per supported vendor (with report lengths),
-  which helps debugging and verifying the not-yet-hardware-tested brand sources.
-- **Bluetooth shows only what Windows already tracks.** A device appears once it's paired and
-  Windows has read its battery (the same value in Settings › Bluetooth & devices). Devices
-  that don't report battery, or are disconnected/asleep, won't appear. Charge state isn't
-  exposed for Bluetooth, so those never show the ⚡ charging mark.
-- Standard user rights are enough — no admin, no elevation.
+## License
+
+This is a personal project and does not currently carry a formal open-source license. If you
+want to reuse the code, please open an issue to discuss it.
